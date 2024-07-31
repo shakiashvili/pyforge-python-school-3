@@ -102,16 +102,22 @@ async def create_upload(file:UploadFile=File(...)):
         csv_reader=csv.DictReader(csv_data)
         # Initializing empty list 
         smil=[]
-        for row in csv_reader:
-            if 'id' in row and 'smiles' in row:
-                try:
-                   id=row['id']
-                   smiles=row['smiles']
-                   if Chem.MolFromSmiles(smiles):
-                        molecule=Molecul(id=id,smiles=smiles)
-                        molecules_db.append(molecule)
-                        smil.append(molecule)
-                except ValueError:
-                    continue
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='File must be in specific Format')
+     for id,smiles in csv_reader:
+
+        if not id or not smiles:
+            errors.append(f"Missing 'id' or 'smiles' in row: {row}")
+            continue
+
+        try:
+            if Chem.MolFromSmiles(smiles):
+                molecule = Molecule(id=int(id), smiles=smiles)
+                molecules_db.append(molecule)
+                smil.append(molecule)
+            else:
+                errors.append(f"Invalid SMILES string in row: {row}")
+        except ValueError as e:
+            errors.append(f"Error processing row {row}: {str(e)}")
+
+    if errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=errors)
     return smil

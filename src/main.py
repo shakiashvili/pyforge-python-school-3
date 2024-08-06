@@ -1,7 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, status
+from fastapi import FastAPI,Request, UploadFile, File, HTTPException, status
 from pydantic import BaseModel
 from rdkit import Chem
-from rdkit.Chem import Draw
+from rdkit.Chem import Draw,MolFromSmiles
 from typing import Dict, List
 import csv
 import io
@@ -30,7 +30,10 @@ def get_server():
 def add_molecule(molecule: Molecul):
     if molecule.id in molecules_db:
         raise HTTPException(status_code=400, detail='Id already exists')
+    if not MolFromSmiles(molecule.smiles):
+        raise HTTPException(status_code=400,detail='Invalid SMILES string') #Make sure that smile is valid
     molecules_db[molecule.id] = molecule
+
     return molecule
 
 # Get Molecule by identifier
@@ -51,9 +54,13 @@ def update_molecule(molecule_id: int, update_mol: Molecul):
     To Update Molecule By ID
     '''
     if molecule_id in molecules_db:
-        molecules_db[molecule_id] = update_mol
-        return update_mol
+        if MolFromSmiles(update_mol.smiles):
+            molecules_db[molecule_id] = update_mol
+            return update_mol
+        else:
+            raise HTTPException(status_code=400, detail='Invalid SMILES string')
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Molecule not found')
+
 
 # Delete molecule by ID
 @app.delete('/molecules/{molecule_id}')
@@ -73,25 +80,27 @@ def return_molecules():
 
 # Substructure Search
 @app.post('/substructure_search', status_code=status.HTTP_200_OK)
-def substructure_search(smiles: str):
+async def substructure_search(request: Request):
     '''
     Performing Substructure Search
     '''
-    try:
-        query_mol = Chem.MolFromSmiles(smiles)
-        if query_mol is None:
-            raise ValueError('Invalid SMILES string')
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    body = await request.json()
+    mols = body.get('mols')
+    mol = body.get('mol')
+    if not mols or not mol:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing mols or mol in the request body')
     
-    matches = []
-    for molecule in molecules_db.values():
-        target_mol = Chem.MolFromSmiles(molecule.smiles)
-        if target_mol and target_mol.HasSubstructMatch(query_mol):
-            matches.append(molecule)
+    molecule = Chem.MolFromSmiles(mol)
+    if molecule is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid query SMILES string')
     
-    return matches
-
+    match = []
+    for smiles in mols:
+        x = Chem.MolFromSmiles(smiles)
+        if x and x.HasSubstructMatch(molecule):
+            match.append(smiles)
+    
+    return match
 # Upload CSV file and add molecules to the database
 @app.post('/uploadFile')
 async def create_upload(file: UploadFile = File(...)):
@@ -124,4 +133,4 @@ async def create_upload(file: UploadFile = File(...)):
         return added_molecules
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='File must be a CSV')
-    
+        

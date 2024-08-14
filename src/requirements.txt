@@ -3,3 +3,4 @@ uvicorn
 flake8
 pytest
 httpx
+rdkit

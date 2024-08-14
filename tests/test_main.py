@@ -59,8 +59,7 @@ def test_invalid_id_string():
     )
     assert response.status_code == 422   # Id is not integer in this case
     data = response.json()
-    assert data['detail'] == 'Molecule not found'
-
+    assert data[0]['msg'] == 'Input should be a valid integer, unable to parse string as an integer'
 
 def test_invalid_id():
     response = client.get(

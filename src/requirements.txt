@@ -1,4 +1,4 @@
 ﻿fastapi
 uvicorn
 flake8
-
+pytest

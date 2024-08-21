@@ -1,0 +1,7 @@
+﻿fastapi
+uvicorn
+flake8
+pytest
+httpx
+rdkit
+python-multipart

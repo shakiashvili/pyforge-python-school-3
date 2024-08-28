@@ -1,11 +1,24 @@
 version: '3.8'
+
 services:
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
   web1:
     build: ./src
     volumes:
       - ./src:/src
     environment:
       SERVER_ID: SERVER-1
+    depends_on:
+      - db
 
   web2:
     build: ./src
@@ -13,7 +26,9 @@ services:
       - ./src:/src
     environment:
       SERVER_ID: SERVER-2
-      
+    depends_on:
+      - db
+
   nginx:
     image: nginx:latest
     ports:
@@ -23,3 +38,6 @@ services:
     depends_on:
       - web1
       - web2
+
+volumes:
+  postgres_data:

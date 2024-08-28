@@ -1,166 +1,79 @@
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException, status
-from pydantic import BaseModel
-from rdkit import Chem
-from rdkit.Chem import MolFromSmiles
-from typing import Dict
-import csv
-import io
-from os import getenv
+# from fastapi import FastAPI
+# from api import molecules as _molecules
+# from api import search as _search
+# from api import upload as _upload
+# from database import engine as _engine
+# from .models import Base as _Base
+# _Base.metadata.create_all(bind=_engine)
 
+# app = FastAPI()
 
-class Molecul(BaseModel):
-    id: int
-    smiles: str
+# app.include_router(_molecules.router)
+# app.include_router(_search.router)
+# app.include_router(_upload.router)
 
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from .service import (
+    create_molecule,
+    get_all_molecules,
+    get_molecule,
+    delete_molecule,
+    update_molecule
+)
+import schema as _schemas
+import database as _database
 
 app = FastAPI()
 
-
-# Initialize molecules_db as a dictionary
-molecules_db: Dict[int, Molecul] = {
-    1: Molecul(id=1, smiles="c1cc(C)ccc1"),
-    2: Molecul(id=2, smiles="CCO"),
-    3: Molecul(id=3, smiles="CC(=O)O"),
-    4: Molecul(id=4, smiles="CC(=O)Oc1ccccc1C(=O)O")
-}
+# Dependency
 
 
-@app.get("/")
-def get_server():
-    return {"server_id": getenv("SERVER_ID", "1")}
+def get_db():
+    db = _database.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-# Add molecule to the database
-@app.post('/add', status_code=status.HTTP_201_CREATED)
-def add_molecule(molecule: Molecul):
-    if molecule.id in molecules_db:
-        raise HTTPException(status_code=400, detail='Id already exists')
-    if not MolFromSmiles(molecule.smiles):
-        raise HTTPException(
-           status_code=400,
-           detail='Invalid SMILES string')
+@app.post("/molecules/", response_model=_schemas.Molecule)
+async def create_molecule_endpoint(
+    molecule: _schemas.CreateMolecule, db: Session = Depends(get_db)
+):
+    return await create_molecule(molecule, db)
 
-    # Make sure that SMILES is valid
-    molecules_db[molecule.id] = molecule
 
+@app.get("/molecules/", response_model=List[_schemas.Molecule])
+async def read_molecules(db: Session = Depends(get_db)):
+    return await get_all_molecules(db)
+
+
+@app.get("/molecules/{molecule_id}", response_model=_schemas.Molecule)
+async def read_molecule(molecule_id: int, db: Session = Depends(get_db)):
+    molecule = await get_molecule(molecule_id, db)
+    if molecule is None:
+        raise HTTPException(status_code=404, detail="Molecule not found")
     return molecule
 
 
-# Get Molecule by identifier
-@app.get('/molecule/{molecule_id}')
-def get_molecule(molecule_id: int, summary='Get specific molecule'):
-    '''
-    To Get Molecule By ID
-    '''
-    molecule = molecules_db.get(molecule_id)
-    if molecule:
-        return molecule
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail='Molecule not found')
-
-
-# Update Molecule by its ID
-
-
-@app.put('/molecules/{molecule_id}', status_code=status.HTTP_202_ACCEPTED)
-def update_molecule(molecule_id: int, update_mol: Molecul):
-    '''
-    To Update Molecule By ID
-    '''
-    if molecule_id in molecules_db:
-        if MolFromSmiles(update_mol.smiles):
-            molecules_db[molecule_id] = update_mol
-            return update_mol
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail='Invalid SMILES string')
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail='Molecule not found'
-        )
-
-
-# Delete molecule by ID
-@app.delete('/molecules/{molecule_id}')
-def molecule_deletion(molecule_id: int):
-    '''
-    Delete a molecule by its ID
-    '''
-    if molecule_id in molecules_db:
-        deleted = molecules_db.pop(molecule_id)
-        return deleted
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail='Molecule not found')
-
-# List All molecules
-
-
-@app.get('/molecules', status_code=status.HTTP_200_OK)
-def return_molecules():
-    return list(molecules_db.values())
-
-# Substructure Search
-
-
-@app.post('/substructure_search', status_code=status.HTTP_200_OK)
-async def substructure_search(request: Request):
-    '''
-    Performing Substructure Search
-    '''
-    body = await request.json()
-    mols = body.get('mols')
-    mol = body.get('mol')
-    if not mols or not mol:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Missing mols or mol in the request body')
-    molecule = Chem.MolFromSmiles(mol)
+@app.delete("/molecules/{molecule_id}", response_model=_schemas.Molecule)
+async def delete_molecule_endpoint(molecule_id: int, db: Session
+                                   = Depends(get_db)):
+    molecule = await get_molecule(molecule_id, db)
     if molecule is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Invalid query SMILES string')
-    match = []
-    for smiles in mols:
-        x = Chem.MolFromSmiles(smiles)
-        if x and x.HasSubstructMatch(molecule):
-            match.append(smiles)
-
-    return match
-
-# Upload CSV file and add molecules to the database
+        raise HTTPException(status_code=404, detail="Molecule not found")
+    await delete_molecule(molecule, db)
+    return molecule
 
 
-@app.post('/uploadFile')
-async def create_upload(file: UploadFile = File(...)):
-    if file.filename.endswith('.csv'):
-        content = await file.read()
-        # Decoding
-        csv_data = io.StringIO(content.decode('utf-8'))
-        csv_reader = csv.reader(csv_data)
-        added_molecules = []
-        for id, smiles in csv_reader:
-            try:
-                id = int(id)
-                if Chem.MolFromSmiles(smiles):
-                    if id not in molecules_db:
-                        molecule = Molecul(id=id, smiles=smiles)
-                        molecules_db[id] = molecule
-                        added_molecules.append(molecule)
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f'Molecule with ID {id} already exists')
-            except ValueError:
-                continue
-        if not added_molecules:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='No valid molecules added')
-        return added_molecules
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='File must be a CSV')
+@app.put("/molecules/{molecule_id}", response_model=_schemas.Molecule)
+async def update_molecule_endpoint(
+    molecule_id: int, molecule_data: _schemas.UpdateMolecule,
+    db: Session = Depends(get_db)
+):
+    molecule = await get_molecule(molecule_id, db)
+    if molecule is None:
+        raise HTTPException(status_code=404, detail="Molecule not found")
+    return await update_molecule(molecule_data, molecule, db)

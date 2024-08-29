@@ -1,8 +1,8 @@
 from typing import TYPE_CHECKING, List
 
-from .database import database
-from .models import models
-from .schema import schema
+from database import database
+from models import models
+from schema import schema
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session

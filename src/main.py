@@ -15,7 +15,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from .service import (
+from service import (
     create_molecule,
     get_all_molecules,
     get_molecule,

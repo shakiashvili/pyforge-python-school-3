@@ -7,7 +7,7 @@ RUN conda install conda-forge::rdkit
 RUN pip install psycopg2-binary
 
 # Setting working directory
-WORKDIR /src
+WORKDIR /app
 
 
 # Copying requirements file

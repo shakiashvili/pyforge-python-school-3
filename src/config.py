@@ -1,28 +1,23 @@
-# import os
-# from pydantic_settings import BaseSettings
-
-
-# class Settings(BaseSettings):
-#     DATABASE_URL: str = os.getenv
-#     ("DATABASE_URL",
-#      "postgresql+psycopg2://postgres:password@localhost/mydatabase")
-#     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-
-
-# settings = Settings()
-# print(settings.DATABASE_URL)
-
-from pydantic_settings import BaseSettings
+import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str  # Make sure this matches your environment variable name
-
-    class Config:
-        env_file = ".env"  # Path to your .env file if you have one
-        env_file_encoding = 'utf-8'  # Ensure proper encoding if necessary
-
-# Create a settings instance
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+    )
 
 
 settings = Settings()
+
+
+def get_db_url():
+    return (
+        f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@"
+        f"{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    )

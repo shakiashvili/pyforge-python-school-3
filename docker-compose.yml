@@ -1,19 +1,33 @@
 version: '3.8'
+
 services:
-  web1:
-    build: ./src
-    volumes:
-      - ./src:/src
+  db:
+    image: postgres
     environment:
-      SERVER_ID: SERVER-1
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "5433:5432"
+    restart: always
+
+  web1:
+    build: .
+    environment:
+      - SERVER_ID=SERVER-1
+    depends_on:
+      - db
+    restart: always
+    entrypoint: ["/bin/sh", "-c", "alembic revision --autogenerate && alembic upgrade head && fastapi run src/main.py"]
 
   web2:
-    build: ./src
-    volumes:
-      - ./src:/src
+    build: .
     environment:
-      SERVER_ID: SERVER-2
-      
+      - SERVER_ID=SERVER-2
+    depends_on:
+      - db
+    restart: always
+
   nginx:
     image: nginx:latest
     ports:
@@ -23,3 +37,4 @@ services:
     depends_on:
       - web1
       - web2
+    restart: always

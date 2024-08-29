@@ -11,6 +11,8 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
+from models import Base
+target_metadata = Base.metadata
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
